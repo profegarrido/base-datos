@@ -51,10 +51,10 @@ Análisis Crítico: Debates técnicos sobre cuándo usar bases de datos embebida
 
 ## Herramientas y Recursos
 
-- [Motor SQL: SQLite] (https://www.sqlite.org/index.html)
+- [Motor SQL: SQLite](https://www.sqlite.org/index.html)
 
 - [Motor NoSQL Portable]: NeDB, EJDB2 o LokiJS (Bases de datos embebidas basadas en documentos).
 
-- [Visualización de Datos: SQLite Browser] (https://sqlitebrowser.org/).
+- [Visualización de Datos: SQLite Browser](https://sqlitebrowser.org/).
 
-- [Documentación SQL: SQL Tutorial] (https://www.sqlitetutorial.net/).
+- [Documentación SQL: SQL Tutorial](https://www.sqlitetutorial.net/).
