@@ -1,0 +1,64 @@
+CALL apoc.load.jsonArray('https://anapioficeandfire.com/api/houses?pageSize=50') YIELD value AS houseData
+
+// 1. Limpiar valores nulos y estandarizar las llaves a camelCase
+WITH apoc.map.clean(houseData, [], ['', [''], [], null]) AS data
+WITH apoc.map.fromPairs([k IN keys(data) | [toLower(substring(k,0,1)) + substring(k,1), data[k]]]) AS data
+
+// 2. Extraer el ID numérico real de la Casa desde su URL de la API
+WITH data, split(data.url, '/')[-1] AS houseId
+WHERE houseId IS NOT NULL
+
+// 3. Crear o actualizar el nodo de la Casa (House)
+MERGE (h:House {id: houseId})
+SET h += apoc.map.clean(data, ['overlord','swornMembers','currentLord','heir','founder','cadetBranches','seats'], ['', [''], [], null]),
+    h.name = COALESCE(data.name, 'Unknown House ' + houseId)
+
+// 4. Miembros Juramentados (Sworn Members) -> Relación con Personas
+FOREACH (memberUrl IN CASE WHEN data.swornMembers IS NOT NULL THEN data.swornMembers ELSE [] END |
+    MERGE (o:Person {id: split(memberUrl, '/')[-1]})
+    MERGE (o)-[:ALLIED_WITH]->(h)
+)
+
+// 5. Asientos/Castillos (Seats)
+FOREACH (s IN [x IN COALESCE(data.seats, []) WHERE x <> ''] |
+    MERGE (seat:Seat {name: s})
+    MERGE (seat)-[:SEAT_OF]->(h)
+)
+
+// 6. Casas Vasallas / Ramas Cadetes (Cadet Branches)
+FOREACH (branchUrl IN CASE WHEN data.cadetBranches IS NOT NULL THEN data.cadetBranches ELSE [] END |
+    MERGE (b:House {id: split(branchUrl, '/')[-1]})
+    MERGE (b)-[:BRANCH_OF]->(h)
+)
+
+// 7. Señor Feudal / Protector (Overlord)
+FOREACH (overlordUrl IN CASE WHEN data.overlord IS NOT NULL AND data.overlord <> '' THEN [data.overlord] ELSE [] END |
+    MERGE (o:House {id: split(overlordUrl, '/')[-1]})
+    MERGE (h)-[:SWORN_TO]->(o)
+)
+
+// 8. Lord Actual (Current Lord) -> ¡CORREGIDO AQUÍ!
+FOREACH (lordUrl IN CASE WHEN data.currentLord IS NOT NULL AND data.currentLord <> '' THEN [data.currentLord] ELSE [] END |
+    MERGE (o:Person {id: split(lordUrl, '/')[-1]})
+    MERGE (h)-[:LED_BY]->(o)
+)
+
+// 9. Fundador (Founder)
+FOREACH (founderUrl IN CASE WHEN data.founder IS NOT NULL AND data.founder <> '' THEN [data.founder] ELSE [] END |
+    MERGE (o:Person {id: split(founderUrl, '/')[-1]})
+    MERGE (h)-[:FOUNDED_BY]->(o)
+)
+
+// 10. Heredero (Heir)
+FOREACH (heirUrl IN CASE WHEN data.heir IS NOT NULL AND data.heir <> '' THEN [data.heir] ELSE [] END |
+    MERGE (o:Person {id: split(heirUrl, '/')[-1]})
+    MERGE (o)-[:HEIR_TO]->(h)
+)
+
+// 11. Región Geográfica (Region)
+FOREACH (r IN CASE WHEN data.region IS NOT NULL AND data.region <> '' THEN [data.region] ELSE [] END |
+    MERGE (reg:Region {name: r})
+    MERGE (h)-[:IN_REGION]->(reg)
+)
+
+RETURN h.id, h.name;

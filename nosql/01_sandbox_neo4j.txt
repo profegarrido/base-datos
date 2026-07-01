@@ -1,0 +1,45 @@
+CALL apoc.load.jsonArray('https://anapioficeandfire.com/api/characters?pageSize=50') YIELD value AS characterData
+
+// 1. Limpiar y estandarizar las llaves a camelCase
+WITH apoc.map.clean(characterData, [], ['', [''], [], null]) AS data
+WITH apoc.map.fromPairs([k IN keys(data) | [toLower(substring(k,0,1)) + substring(k,1), data[k]]]) AS data
+
+// 2. Extraer el ID del personaje principal desde su URL oficial
+WITH data, split(data.url, '/')[-1] AS characterId
+WHERE characterId IS NOT NULL
+
+// 3. Crear el personaje principal
+MERGE (p:Person {id: characterId})
+SET p += apoc.map.clean(data, ['allegiances','father','spouse','mother','books','povBooks'], ['', [''], [], null]),
+    p.name = COALESCE(data.name, HEAD(data.aliases), 'Unknown Character ' + characterId)
+
+// 4. Procesar Alianzas (Casas) de forma segura fuera de FOREACH
+WITH p, data
+UNWIND (CASE WHEN data.allegiances IS NOT NULL THEN data.allegiances ELSE [] END) AS houseUrl
+WITH p, data, split(houseUrl, '/')[-1] AS houseId
+WHERE houseId <> ''
+MERGE (h:House {id: houseId})
+MERGE (p)-[:ALLIED_WITH]->(h)
+
+// 5. Procesar Relaciones Familiares (Padre, Madre, Cónyuge)
+WITH DISTINCT p, data
+
+// Padre
+FOREACH (fatherUrl IN CASE WHEN data.father IS NOT NULL AND data.father <> '' THEN [data.father] ELSE [] END |
+    MERGE (o:Person {id: split(fatherUrl, '/')[-1]})
+    MERGE (o)-[:PARENT_OF {type:'father'}]->(p)
+)
+
+// Madre
+FOREACH (motherUrl IN CASE WHEN data.mother IS NOT NULL AND data.mother <> '' THEN [data.mother] ELSE [] END |
+    MERGE (o:Person {id: split(motherUrl, '/')[-1]})
+    MERGE (o)-[:PARENT_OF {type:'mother'}]->(p)
+)
+
+// Cónyuge
+FOREACH (spouseUrl IN CASE WHEN data.spouse IS NOT NULL AND data.spouse <> '' THEN [data.spouse] ELSE [] END |
+    MERGE (o:Person {id: split(spouseUrl, '/')[-1]})
+    MERGE (o)-[:SPOUSE]->(p)
+)
+
+RETURN p.id, p.name;

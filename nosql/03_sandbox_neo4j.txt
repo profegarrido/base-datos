@@ -1,0 +1,6 @@
+CREATE CONSTRAINT FOR (p:Person) require p.id is unique;
+CREATE CONSTRAINT FOR (h:House) require h.id is unique;
+CREATE INDEX FOR (p:Person) ON (p.name);
+CREATE INDEX FOR (h:House) ON (h.name);
+CREATE INDEX FOR (s:Seat) ON (s.name);
+CREATE INDEX FOR (r:Region) ON (r.name);
